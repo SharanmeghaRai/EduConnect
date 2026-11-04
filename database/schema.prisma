@@ -1,0 +1,342 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  avatarUrl     String?
+  role          String    @default("STUDENT") // STUDENT | FACULTY | ADMIN
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  studentProfile        StudentProfile?
+  attempts              Attempt[]
+  jobBookmarks          JobBookmark[]
+  jobReports            JobReport[]
+  materialProgress      MaterialProgress[]
+  newsletterSubscriptions NewsletterSubscription[]
+  chatSessions          ChatSession[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model StudentProfile {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rollNumber        String?   @unique
+  department        String?   // e.g. "Computer Science & Engineering"
+  graduationYear    Int?      // e.g. 2026
+  targetRoles       String?   // "Software Engineer, Frontend Developer"
+  resumeUrl         String?
+  cgpa              Float?
+  prepStreakDays    Int       @default(1)
+  skills            String?   // JSON array e.g. '["React","Node.js","Python"]'
+  preferredCompanies String? // e.g. "TCS, Infosys, Microsoft"
+  isLeaderboardOptIn Boolean  @default(true)
+  lastActiveDate    DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Exam {
+  id                  String        @id @default(uuid())
+  title               String
+  slug                String        @unique
+  description         String?
+  category            String        // QUANT | LOGICAL | VERBAL | DATA_INT | TECH_CS | TECH_CORE
+  difficulty          String        @default("MEDIUM") // EASY | MEDIUM | HARD
+  durationMinutes     Int           @default(30)
+  totalMarks          Float         @default(30.0)
+  passingMarks        Float         @default(12.0)
+  negativeMarkingRatio Float        @default(0.25) // penalty per wrong answer, e.g. 0.25
+  maxAttempts         Int           @default(3)
+  isPublished         Boolean       @default(true)
+  shuffleQuestions    Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  questions           Question[]
+  attempts            Attempt[]
+
+  @@index([category])
+  @@index([difficulty])
+  @@index([isPublished])
+}
+
+model Question {
+  id              String         @id @default(uuid())
+  examId          String
+  exam            Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  prompt          String
+  explanation     String?
+  topicTag        String?        // e.g. "Percentages", "Time and Work", "OS-Deadlocks"
+  marks           Float          @default(1.0)
+  orderIndex      Int            @default(0)
+  createdAt       DateTime       @default(now())
+
+  options         Option[]
+  attemptAnswers  AttemptAnswer[]
+
+  @@index([examId])
+  @@index([topicTag])
+}
+
+model Option {
+  id              String         @id @default(uuid())
+  questionId      String
+  question        Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label           String         // A, B, C, D
+  text            String
+  isCorrect       Boolean        @default(false)
+
+  attemptAnswers  AttemptAnswer[]
+
+  @@index([questionId])
+}
+
+model Attempt {
+  id                  String        @id @default(uuid())
+  examId              String
+  exam                Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptNumber       Int           @default(1)
+  startedAt           DateTime      @default(now())
+  submittedAt         DateTime?
+  timeSpentSeconds    Int           @default(0)
+  score               Float         @default(0.0)
+  maxScore            Float         @default(0.0)
+  accuracyPercentage  Float         @default(0.0)
+  peerPercentile      Float         @default(0.0)
+  status              String        @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | TIMED_OUT
+
+  answers             AttemptAnswer[]
+
+  @@index([userId])
+  @@index([examId])
+  @@index([status])
+}
+
+model AttemptAnswer {
+  id                String     @id @default(uuid())
+  attemptId         String
+  attempt           Attempt    @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId        String
+  question          Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId  String?
+  selectedOption    Option?    @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  isMarkedForReview Boolean    @default(false)
+  isCorrect         Boolean    @default(false)
+  marksAwarded      Float      @default(0.0)
+  timeSpentSeconds  Int        @default(0)
+
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model JobListing {
+  id                  String      @id @default(uuid())
+  companyName         String
+  companyLogo         String?
+  roleTitle           String
+  jobType             String      @default("FULL_TIME") // FULL_TIME | INTERNSHIP
+  location            String      // e.g. "Bengaluru, Karnataka (Hybrid)"
+  salaryRange         String      // e.g. "₹12 - ₹18 LPA" or "₹40,000 / month"
+  eligibilityCriteria String      // e.g. "B.Tech/B.E (CSE/IT/ECE), 2026 batch, CGPA >= 7.0"
+  requiredSkills      String      // e.g. "React, Node.js, PostgreSQL, TypeScript"
+  applyUrl            String
+  isVerified          Boolean     @default(true)
+  verifiedByUserId    String?
+  verifiedAt          DateTime?   @default(now())
+  verificationSource  String?     @default("University Placement Cell")
+  linkStatus          String      @default("ACTIVE") // ACTIVE | BROKEN | EXPIRED
+  deadline            DateTime
+  viewCount           Int         @default(0)
+  applyClickCount     Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  bookmarks           JobBookmark[]
+  reports             JobReport[]
+
+  @@index([isVerified])
+  @@index([jobType])
+  @@index([linkStatus])
+  @@index([deadline])
+}
+
+model JobBookmark {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListingId  String
+  jobListing    JobListing  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([userId, jobListingId])
+  @@index([userId])
+}
+
+model JobReport {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListingId  String
+  jobListing    JobListing  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  reason        String      // e.g. "404 Not Found", "Expired Form", "Irrelevant Link"
+  status        String      @default("PENDING") // PENDING | RESOLVED | DISMISSED
+  createdAt     DateTime    @default(now())
+
+  @@index([jobListingId])
+  @@index([status])
+}
+
+model StudyMaterial {
+  id                String      @id @default(uuid())
+  title             String
+  category          String      // APTITUDE | TECHNICAL | INTERVIEW_PREP
+  subCategory       String?     // e.g. "HR", "TECH_INTERVIEW", "GD", "RESUME", "QUANT", "CS_CORE"
+  contentType       String      @default("DOCUMENT") // PDF | DOCUMENT | VIDEO | ARTICLE | CHEATSHEET
+  resourceUrl       String
+  description       String?
+  tags              String?     // Comma separated e.g. "Dynamic Programming, Graphs, LeetCode"
+  difficulty        String      @default("INTERMEDIATE") // BEGINNER | INTERMEDIATE | ADVANCED
+  estimatedMinutes  Int         @default(15)
+  orderIndex        Int         @default(0)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  progressRecords   MaterialProgress[]
+
+  @@index([category])
+  @@index([subCategory])
+}
+
+model MaterialProgress {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  materialId      String
+  material        StudyMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  isCompleted     Boolean       @default(false)
+  isBookmarked    Boolean       @default(false)
+  completedAt     DateTime?
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([userId, materialId])
+  @@index([userId])
+  @@index([materialId])
+}
+
+model Newsletter {
+  id              String      @id @default(uuid())
+  title           String
+  editionNumber   Int         @unique
+  contentHtml     String
+  summary         String?
+  targetAudience  String?     @default("All Registered Students")
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  status          String      @default("PUBLISHED") // DRAFT | SCHEDULED | PUBLISHED
+  recipientCount  Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  deliveries      NewsletterDelivery[]
+
+  @@index([status])
+}
+
+model NewsletterSubscription {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email           String
+  isSubscribed    Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+
+  @@unique([userId])
+  @@index([email])
+}
+
+model NewsletterDelivery {
+  id              String      @id @default(uuid())
+  newsletterId    String
+  newsletter      Newsletter  @relation(fields: [newsletterId], references: [id], onDelete: Cascade)
+  recipientEmail  String
+  status          String      @default("DELIVERED") // DELIVERED | FAILED | PENDING
+  sentAt          DateTime    @default(now())
+  error           String?
+
+  @@index([newsletterId])
+  @@index([status])
+}
+
+model ChatSession {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String        @default("Placement Guidance")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    ChatMessage[]
+
+  @@index([userId])
+}
+
+model ChatMessage {
+  id              String       @id @default(uuid())
+  sessionId       String
+  session         ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role            String       // USER | ASSISTANT | SYSTEM
+  content         String
+  citationsJson   String?      // Grounded portal resources (exams, materials, jobs)
+  feedbackRating  Int?         // 1 for thumbs up, -1 for thumbs down
+  createdAt       DateTime     @default(now())
+
+  @@index([sessionId])
+}
+
+model Notification {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String      @default("INFO") // INFO | EXAM | JOB | NEWSLETTER
+  isRead      Boolean     @default(false)
+  link        String?
+  createdAt   DateTime    @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  actorUserId   String?
+  actorUser     User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action        String      // e.g. "CREATE_EXAM", "VERIFY_JOB", "ROLE_CHANGE"
+  entityType    String      // e.g. "EXAM", "JOB", "USER"
+  entityId      String?
+  metadataJson  String?
+  ipAddress     String?
+  createdAt     DateTime    @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType])
+}
